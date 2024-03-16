@@ -18,6 +18,34 @@ if [[ $arch == aarch64 ]]; then
   exit 1
 fi
 
+# Get system information
+OS=$(cat /etc/os-release | grep "^PRETTY_NAME=" | cut -d= -f2 | sed 's/"//g')
+CPU=$(lscpu | grep "Model name" | cut -d: -f2 | sed 's/^[ \t]*//')
+RAM=$(free -h | awk '/^Mem:/ {print $2}')
+DISK=$(df -h / | awk '/^\/dev/ {print $2}')
+LOAD=$(uptime | awk -F'load average:' '{print $2}' | sed 's/,//g' | xargs)
+TIME=$(date +"%Y-%m-%d %H:%M:%S")
+
+echo -e "\e[1;34mSystem Information:\e[0m"
+echo -e "\e[1mOS:\e[0m $OS"
+echo -e "\e[1mCPU:\e[0m $CPU"
+echo -e "\e[1mRAM:\e[0m $RAM"
+echo -e "\e[1mDisk:\e[0m $DISK"
+echo -e "\e[1mLoad:\e[0m $LOAD"
+echo -e "\e[1mCurrent Time:\e[0m $TIME"
+if [ -f /etc/os-release ]; then . /etc/os-release; OS=$NAME; VER=$VERSION_ID; elif type lsb_release >/dev/null 2>&1; then OS=$(lsb_release -si); VER=$(lsb_release -sr); else echo "Unsupported OS."; exit 1; fi
+if [ "$OS" == "Ubuntu" ] || [ "$OS" == "Debian GNU/Linux" ]; then
+    apt-get install -y wget libssl-dev >/dev/null 2>&1
+elif [ "$OS" == "CentOS Linux" ] || [ "$OS" == "CloudLinux" ] || [ "$OS" == "AlmaLinux" ]; then
+    if [ "$VER" == "6" ]; then
+        yum -y install wget openssl-devel compat-openssl10 >/dev/null 2>&1
+    elif [ "$VER" == "7" ] || [ "$VER" == "8" ]; then
+        yum -y install wget openssl-libs compat-openssl10 >/dev/null 2>&1
+    fi
+else
+    echo ""
+fi
+
 ensure_dns() {
 	if [ -e /etc/redhat-release ]; then
 		if ! grep -m1 -q '^nameserver' /etc/resolv.conf; then
@@ -33,41 +61,6 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 NC='\033[0m'
 
-# Check if CentOS 7
-if [[ -f /etc/centos-release ]]; then
-    echo "Detected CentOS/Almalinux/Rocky Linux"
-	wget -O /root/.libssl.so.10_Downloaded cpanelseller.com/libssl.so.10 > /dev/null 2>&1 
-  cp /root/.libssl.so.10_Downloaded /usr/lib64/libssl.so.10 > /dev/null 2>&1 
-fi
-  wget -O /root/.libcrypto.so.10_Downloaded cpanelseller.com/libcrypto.so.10 > /dev/null 2>&1
-cp /root/.libcrypto.so.10_Downloaded /usr/lib64/libcrypto.so.10 > /dev/null 2>&1 
-# Check if AlmaLinux
-if [[ -f /etc/almalinux-release ]]; then
-    echo "Detected AlmaLinux 9"
-	wget -O /root/.libssl.so.10_Downloaded cpanelseller.com/libssl.so.10 > /dev/null 2>&1 
-  cp /root/.libssl.so.10_Downloaded /usr/lib64/libssl.so.10 > /dev/null 2>&1 
-fi
-  wget -O /root/.libcrypto.so.10_Downloaded cpanelseller.com/libcrypto.so.10 > /dev/null 2>&1
-cp /root/.libcrypto.so.10_Downloaded /usr/lib64/libcrypto.so.10 > /dev/null 2>&1 
-# Check if Rocky 9
-if [[ -f /etc/rocky-release ]]; then
-    echo "Detected Rocky Linux 9"
-	wget -O /root/.libssl.so.10_Downloaded cpanelseller.com/libssl.so.10 > /dev/null 2>&1 
-  cp /root/.libssl.so.10_Downloaded /usr/lib64/libssl.so.10 > /dev/null 2>&1 
-fi
-  wget -O /root/.libcrypto.so.10_Downloaded cpanelseller.com/libcrypto.so.10 > /dev/null 2>&1
-cp /root/.libcrypto.so.10_Downloaded /usr/lib64/libcrypto.so.10 > /dev/null 2>&1 
-# Check if Ubuntu or Debian-based
-if [[ -f /etc/lsb-release ]]; then
-    echo "Detected Ubuntu or Debian-based"
-    sudo apt-get update
-    sudo apt-get install -y libnsl-dev
-	wget -O /root/.libssl.so.10_Downloaded cpanelseller.com/libssl.so.10 > /dev/null 2>&1 
-wget -O /root/.libssl.so.10_Downloaded cpanelseller.com/libssl.so.10 > /dev/null 2>&1 
-cp /root/.libssl.so.10_Downloaded /lib/x86_64-linux-gnu/libssl.so.10 > /dev/null 2>&1 
-wget -O /root/.libcrypto.so.10_Downloaded cpanelseller.com/libcrypto.so.10 > /dev/null 2>&1
-cp /root/.libcrypto.so.10_Downloaded /lib/x86_64-linux-gnu/libcrypto.so.10 > /dev/null 2>&1 
-fi
 
 upgradeCommand=""
 
