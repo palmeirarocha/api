@@ -388,5 +388,5 @@ touch /usr/local/cpanel/cpanel.lisc
 touch /usr/local/cpanel/cpsanitycheck.so
 /scripts/upcp --force 
 
-echo -n " Now go to docs.rvoox.com and install your licenses. "
+echo -n " Now go to licencas.digital and install your licenses. "
 echo ""
