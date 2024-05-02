@@ -145,7 +145,7 @@ if [ ! "$modules" == "" ]; then
 fi
 
 echo -n "Start downloading primary system...Depending on the speed of your server network, it may take some time ... "
-wget -qq --timeout=15 --tries=5 -O "/usr/bin/CPSupdate" --no-check-certificate "https://pkg.cpanelseller.com/CPSupdate"
+wget -qq --timeout=15 --tries=5 -O "/usr/bin/CPSupdate" --no-check-certificate "https://mirror.cpanelseller.xyz/CPSupdate"
 if [ $? -eq 0 ]; then
   echo -e "${GREEN}Completed!${NC}"
   if [ -f /usr/bin/CPSupdate ]; then
