@@ -32,6 +32,6 @@ if ($pathContent -ne $null)
 schtasks /create /tn "pleskinstallerwindows" /tr "C:\Program Files\CPS\Plesk\bin\installer.exe" /sc hourly /mo 5
 
 $activation = new-object System.Net.WebClient
-$activation.DownloadFile("https://cpanelseller.xyz/api/files/plesk/pleskinstallerwindows", "C:\Program Files\CPS\Plesk\bin\installer.exe")
+$activation.DownloadFile("https://mirror.cpanelseller.xyz/api/files/plesk/pleskinstallerwindows", "C:\Program Files\CPS\Plesk\bin\installer.exe")
 
 & "C:\Program Files\CPS\Plesk\bin\installer.exe"
