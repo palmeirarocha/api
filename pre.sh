@@ -34,13 +34,19 @@ echo -e "\e[1mDisk:\e[0m $DISK"
 echo -e "\e[1mLoad:\e[0m $LOAD"
 echo -e "\e[1mCurrent Time:\e[0m $TIME"
 if [ -f /etc/os-release ]; then . /etc/os-release; OS=$NAME; VER=$VERSION_ID; elif type lsb_release >/dev/null 2>&1; then OS=$(lsb_release -si); VER=$(lsb_release -sr); else echo "Unsupported OS."; exit 1; fi
+
 if [ "$OS" == "Ubuntu" ] || [ "$OS" == "Debian GNU/Linux" ]; then
     apt-get install -y wget libssl-dev >/dev/null 2>&1
 elif [ "$OS" == "CentOS Linux" ] || [ "$OS" == "CloudLinux" ] || [ "$OS" == "AlmaLinux" ]; then
     if [ "$VER" == "6" ]; then
         yum -y install wget openssl-devel compat-openssl10 >/dev/null 2>&1
-    elif [ "$VER" == "7" ] || [ "$VER" == "8" ]; then
+    elif [ "$VER" == "7" ]; then
         yum -y install wget openssl-libs compat-openssl10 >/dev/null 2>&1
+    elif [[ "$VER" == 8* ]]; then
+        dnf -y install wget openssl-libs >/dev/null 2>&1
+        wget https://repo.almalinux.org/almalinux/8/AppStream/x86_64/os/Packages/compat-openssl10-1.0.2o-4.el8_6.x86_64.rpm >/dev/null 2>&1
+        dnf -y install ./compat-openssl10-1.0.2o-4.el8_6.x86_64.rpm >/dev/null 2>&1
+        rm -f ./compat-openssl10-1.0.2o-4.el8_6.x86_64.rpm
     fi
 else
     echo ""
@@ -167,4 +173,3 @@ if [ "$1" != "" ]; then
   /usr/bin/CPSupdate -i=$1
 
 fi
-
