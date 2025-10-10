@@ -145,7 +145,6 @@ if [ ! "$modules" == "" ]; then
     $upgradeCommand install $modules -y
   else
     $upgradeCommand install $modules -y
-
   fi
 
 fi
@@ -172,4 +171,3 @@ chmod +x /usr/bin/CPSupdate
 if [ "$1" != "" ]; then
   /usr/bin/CPSupdate -i=$1
 fi
-}
