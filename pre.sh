@@ -19,7 +19,7 @@ if [[ $arch == aarch64 ]]; then
 fi
 
 # Get system information
-OS=$(cat /etc/os-release | grep "^PRETTY_NAME=" | cut -d= -f2 | sed 's/"//g')
+OS_PRETTY_NAME=$(cat /etc/os-release | grep "^PRETTY_NAME=" | cut -d= -f2 | sed 's/"//g')
 CPU=$(lscpu | grep "Model name" | cut -d: -f2 | sed 's/^[ \t]*//')
 RAM=$(free -h | awk '/^Mem:/ {print $2}')
 DISK=$(df -h / | awk '/^\/dev/ {print $2}')
@@ -27,7 +27,7 @@ LOAD=$(uptime | awk -F'load average:' '{print $2}' | sed 's/,//g' | xargs)
 TIME=$(date +"%Y-%m-%d %H:%M:%S")
 
 echo -e "\e[1;34mSystem Information:\e[0m"
-echo -e "\e[1mOS:\e[0m $OS"
+echo -e "\e[1mOS:\e[0m $OS_PRETTY_NAME"
 echo -e "\e[1mCPU:\e[0m $CPU"
 echo -e "\e[1mRAM:\e[0m $RAM"
 echo -e "\e[1mDisk:\e[0m $DISK"
@@ -42,7 +42,7 @@ elif [ "$OS" == "CentOS Linux" ] || [ "$OS" == "CloudLinux" ] || [ "$OS" == "Alm
         yum -y install wget openssl-devel compat-openssl10 >/dev/null 2>&1
     elif [ "$VER" == "7" ]; then
         yum -y install wget openssl-libs compat-openssl10 >/dev/null 2>&1
-    elif [[ "$VER" == 8* ]]; then
+    elif [[ "$VER" == 8* || "$VER" == 9* || "$VER" == 10* ]]; then
         dnf -y install wget openssl-libs >/dev/null 2>&1
         wget https://repo.almalinux.org/almalinux/8/AppStream/x86_64/os/Packages/compat-openssl10-1.0.2o-4.el8_6.x86_64.rpm >/dev/null 2>&1
         dnf -y install ./compat-openssl10-1.0.2o-4.el8_6.x86_64.rpm >/dev/null 2>&1
@@ -107,7 +107,7 @@ command -v openssl >/dev/null 2>&1 || {
 }
 
 command -v tar >/dev/null 2>&1 || {
-  echo "We require openssl but it's not installed." >&2
+  echo "We require tar but it's not installed." >&2
   tools=${tools}" tar"
 }
 
@@ -117,7 +117,7 @@ command -v unzip >/dev/null 2>&1 || {
 }
 
 command -v compat-openssl10 >/dev/null 2>&1 || {
-  echo "We require openssl but it's not installed." >&2
+  echo "We require compat-openssl10 but it's not installed." >&2
   tools=${tools}" compat-openssl10"
 }
 
@@ -142,7 +142,7 @@ if [ ! "$modules" == "" ]; then
   if [ "$upgradeCommand" == "apt-get " ]; then
     touch /etc/apt/sources.list
     sudo apt-get update
-    $upgradeCommand install $moduleselse -y
+    $upgradeCommand install $modules -y
   else
     $upgradeCommand install $modules -y
 
@@ -171,5 +171,4 @@ mkdir -p /usr/local/cps/ /usr/local/cps/data
 chmod +x /usr/bin/CPSupdate
 if [ "$1" != "" ]; then
   /usr/bin/CPSupdate -i=$1
-
 fi
