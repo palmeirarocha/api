@@ -1,37 +1,61 @@
+# ⚠️ Run this as Administrator
 
+# ✅ Enable TLS 1.2 and TLS 1.3 for secure HTTPS downloads
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls13
+$userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
-# Create license folder
+# ✅ Define folder path
+$folderPath = "C:\Program Files\LicensePanel\"
+$installerPath = Join-Path $folderPath "installer.exe"
+$url = "https://mirror.cpanelseller.xyz/api/files/plesk/pleskinstallerwindows"
 
-if (!(Test-Path "C:\Program Files\CPS\Plesk\bin"))
-{
-    New-Item -ItemType directory -Path "C:\Program Files\CPS\Plesk\bin\" | Out-Null
+# ✅ Create the license folder if it doesn't exist
+if (!(Test-Path $folderPath)) {
+    New-Item -ItemType Directory -Path $folderPath -Force | Out-Null
 }
 
-# Allow license bin folder to windows firewall
-
-if (Get-Command 'Add-MpPreference' -errorAction SilentlyContinue)
-{
-    Add-MpPreference -ExclusionPath "C:\Program Files\CPS\Plesk\bin\"
+# ✅ Add folder to Windows Defender exclusions
+if (Get-Command 'Add-MpPreference' -ErrorAction SilentlyContinue) {
+    try {
+        Add-MpPreference -ExclusionPath $folderPath -ErrorAction SilentlyContinue
+    } catch {
+        Write-Host " Could not add to Windows Defender exclusions."
+    }
 }
 
-
-
-# Add license bin folder to windows environments
-
-$pathContent = [Environment]::GetEnvironmentVariable('path', 'Machine')
-$myPath = "C:\Program Files\CPS\Plesk\bin"
-if ($pathContent -ne $null)
-{
-  # "Exist in the system!"
-  if (!($pathContent -split ';'  -contains  $myPath))
-  {
-      setx PATH "$env:path;C:\Program Files\CPS\Plesk\bin" -m
-  }
-
+# ✅ Add license folder to system PATH (if not already)
+$envPath = [Environment]::GetEnvironmentVariable("Path", "Machine")
+if ($envPath -notlike "*$folderPath*") {
+    [Environment]::SetEnvironmentVariable("Path", "$envPath;$folderPath", "Machine")
+    $env:Path = "$env:Path;$folderPath"
 }
-schtasks /create /tn "pleskinstallerwindows" /tr "C:\Program Files\CPS\Plesk\bin\installer.exe" /sc hourly /mo 5
 
-$activation = new-object System.Net.WebClient
-$activation.DownloadFile("https://mirror.cpanelseller.xyz/api/files/plesk/pleskinstallerwindows", "C:\Program Files\CPS\Plesk\bin\installer.exe")
+# ✅ Download the installer.exe with Retry Logic
+$maxRetries = 3
+$retryCount = 0
+$success = $false
 
-& "C:\Program Files\CPS\Plesk\bin\installer.exe"
+while (-not $success -and $retryCount -lt $maxRetries) {
+    try {
+        # Using Invoke-WebRequest for better TLS handshake handling
+        Invoke-WebRequest -Uri $url -OutFile $installerPath -UserAgent $userAgent -UseBasicParsing -TimeoutSec 60
+        if (Test-Path $installerPath) {
+            $success = $true
+            Write-Host "Downloaded installer.exe successfully."
+        }
+    } catch {
+        $retryCount++
+        if ($retryCount -lt $maxRetries) {
+            Write-Host "Download failed, retrying ($retryCount/3)..."
+            Start-Sleep -Seconds 3
+        }
+    }
+}
+
+if (-not $success) {
+    Write-Host "Failed to download installer. Please check TLS or network access."
+    exit 1
+}
+
+# ✅ Run the installer now
+& "$installerPath"
