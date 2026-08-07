@@ -1,216 +1,238 @@
-#!/bin/bash
-# Script de pré-instalação para sistemas de licenciamento.
+#!/bin/sh
+# CPS Licensing Installer (POSIX /bin/sh) - dnf/yum/apt only
+# Installs only missing packages:
+#   RHEL-like: compat-openssl11 libcurl-devel re2c curl wget unzip
+#   Debian-like: libssl1.1 libcurl4-openssl-dev re2c curl wget unzip
 
-# Verifica se é usuário root
-if [[ $EUID -ne 0 ]]; then
-  echo "Você deve ser o usuário root." 2>&1
-  exit 1
+# ---------------------------
+# Colors / UI
+# ---------------------------
+BOLD="$(printf '\033[1m')"
+RED="$(printf '\033[0;31m')"
+GREEN="$(printf '\033[0;32m')"
+YELLOW="$(printf '\033[0;33m')"
+BLUE="$(printf '\033[0;34m')"
+NC="$(printf '\033[0m')"
+
+info() { printf "%s[INFO]%s %s\n" "$BLUE" "$NC" "$*"; }
+ok()   { printf "%s[OK]%s   %s\n" "$GREEN" "$NC" "$*"; }
+warn() { printf "%s[WARN]%s %s\n" "$YELLOW" "$NC" "$*"; }
+err()  { printf "%s[ERR]%s  %s\n" "$RED" "$NC" "$*" 1>&2; }
+die()  { err "$*"; exit 1; }
+
+# ---------------------------
+# Root check
+# ---------------------------
+if [ "$(id -u 2>/dev/null)" != "0" ]; then
+  die "You must be root."
 fi
 
-arch=$(uname -i)
+# ---------------------------
+# Arch check
+# ---------------------------
+ARCH="$(uname -m 2>/dev/null || echo unknown)"
+case "$ARCH" in
+  i386|i486|i586|i686) die "32-bit systems are not supported." ;;
+  aarch64|arm64)       die "aarch64/arm64 systems are not supported." ;;
+esac
 
-# Verifica arquitetura (Bloqueia 32-bit e ARM)
-if [[ $arch == i*86 ]]; then
-  echo "Não suportamos versões 32-bit. Por favor, entre em contato com o suporte!"
-  exit 1
+# ---------------------------
+# OS detection
+# ---------------------------
+OS_PRETTY="Unknown"
+OS_ID=""
+OS_VERSION_ID=""
+if [ -f /etc/os-release ]; then
+  # shellcheck disable=SC1091
+  . /etc/os-release
+  OS_PRETTY="${PRETTY_NAME:-${NAME:-Unknown}}"
+  OS_ID="${ID:-}"
+  OS_VERSION_ID="${VERSION_ID:-}"
 fi
 
-if [[ $arch == aarch64 ]]; then
-  echo "Não suportamos versões aarch64 (ARM). Por favor, entre em contato com o suporte!"
-  exit 1
+# ---------------------------
+# System info (best effort)
+# ---------------------------
+CPU="$( (command -v lscpu >/dev/null 2>&1 && lscpu 2>/dev/null | awk -F: '/Model name/ {gsub(/^[ \t]+/,"",$2); print $2; exit}') || echo "N/A" )"
+RAM="$( (command -v free  >/dev/null 2>&1 && free -h 2>/dev/null | awk '/^Mem:/ {print $2; exit}') || echo "N/A" )"
+DISK="$(df -h / 2>/dev/null | awk 'NR==2 {print $2; exit}')"
+LOAD="$(uptime 2>/dev/null | awk -F'load average:' '{gsub(/,/,"",$2); gsub(/^[ \t]+/,"",$2); print $2}')"
+NOW="$(date '+%Y-%m-%d %H:%M:%S' 2>/dev/null || echo "")"
+
+printf "%s%sSystem Information%s\n" "$BOLD" "$BLUE" "$NC"
+printf "%sOS:%s   %s\n" "$BOLD" "$NC" "$OS_PRETTY"
+printf "%sArch:%s %s\n" "$BOLD" "$NC" "$ARCH"
+printf "%sCPU:%s  %s\n" "$BOLD" "$NC" "$CPU"
+printf "%sRAM:%s  %s\n" "$BOLD" "$NC" "$RAM"
+printf "%sDisk:%s %s\n" "$BOLD" "$NC" "${DISK:-N/A}"
+printf "%sLoad:%s %s\n" "$BOLD" "$NC" "${LOAD:-N/A}"
+printf "%sTime:%s %s\n\n" "$BOLD" "$NC" "$NOW"
+
+# ---------------------------
+# Package manager detection
+# ---------------------------
+PKG=""
+UPDATE=""
+INSTALL=""
+
+if command -v dnf >/dev/null 2>&1; then
+  PKG="dnf"
+  UPDATE="dnf -y makecache"
+  INSTALL="dnf -y install"
+elif command -v yum >/dev/null 2>&1; then
+  PKG="yum"
+  UPDATE="yum -y makecache"
+  INSTALL="yum -y install"
+elif command -v apt-get >/dev/null 2>&1; then
+  PKG="apt-get"
+  UPDATE="apt-get -y update"
+  INSTALL="apt-get -y install"
+else
+  die "Unsupported OS: need dnf, yum, or apt-get."
 fi
 
-# Obter informações do sistema
-OS_PRETTY_NAME=$(cat /etc/os-release | grep "^PRETTY_NAME=" | cut -d= -f2 | sed 's/"//g')
-CPU=$(lscpu | grep "Model name" | cut -d: -f2 | sed 's/^[ \t]*//')
-RAM=$(free -h | awk '/^Mem:/ {print $2}')
-DISK=$(df -h / | awk '/^\/dev/ {print $2}')
-LOAD=$(uptime | awk -F'load average:' '{print $2}' | sed 's/,//g' | xargs)
-TIME=$(date +"%Y-%m-%d %H:%M:%S")
+ok "Package manager: $PKG"
 
-echo -e "\e[1;34mInformações do Sistema:\e[0m"
-echo -e "\e[1mSO:\e[0m $OS_PRETTY_NAME"
-echo -e "\e[1mCPU:\e[0m $CPU"
-echo -e "\e[1mRAM:\e[0m $RAM"
-echo -e "\e[1mDisco:\e[0m $DISK"
-echo -e "\e[1mLoad:\e[0m $LOAD"
-echo -e "\e[1mHora Atual:\e[0m $TIME"
-
-# Detecção detalhada do SO
-if [ -f /etc/os-release ]; then 
-    . /etc/os-release
-    OS=$NAME
-    VER=$VERSION_ID
-elif type lsb_release >/dev/null 2>&1; then 
-    OS=$(lsb_release -si)
-    VER=$(lsb_release -sr)
-else 
-    echo "Sistema Operacional não suportado."
-    exit 1
+# ---------------------------
+# Ensure DNS (only if no nameserver)
+# ---------------------------
+if ! grep -m1 -q '^nameserver' /etc/resolv.conf 2>/dev/null; then
+  warn "No nameserver found in /etc/resolv.conf — adding Google DNS."
+  {
+    printf "\n"
+    printf "nameserver 8.8.8.8\n"
+    printf "nameserver 8.8.4.4\n"
+  } >> /etc/resolv.conf
 fi
 
-# Instalação de dependências baseadas no SO
-if [[ "$OS" == "Ubuntu" || "$OS" == "Debian GNU/Linux" ]]; then
-    apt-get update -qq
-    apt-get install -y wget libssl-dev >/dev/null 2>&1
-elif [[ "$OS" == "CentOS Linux" || "$OS" == "CloudLinux" || "$OS" == "AlmaLinux" || "$OS" == "Rocky Linux" ]]; then
-    if [ "$VER" == "6" ]; then
-        yum -y install wget openssl-devel compat-openssl10 >/dev/null 2>&1
-    elif [ "$VER" == "7" ]; then
-        yum -y install wget openssl-libs compat-openssl10 >/dev/null 2>&1
-    elif [[ "$VER" == 8* || "$VER" == 9* || "$VER" == 10* ]]; then
-        # Suporte para EL8/9/10 que removeu compat-openssl10 dos repositórios padrão
-        dnf -y install wget openssl-libs >/dev/null 2>&1
-        # Tenta baixar e instalar manualmente o RPM de compatibilidade se necessário
-        if ! rpm -q compat-openssl10 >/dev/null 2>&1; then
-            echo "Instalando compat-openssl10 para sistemas EL modernos..."
-            wget -q https://repo.almalinux.org/almalinux/8/AppStream/x86_64/os/Packages/compat-openssl10-1.0.2o-4.el8_6.x86_64.rpm
-            dnf -y install ./compat-openssl10-1.0.2o-4.el8_6.x86_64.rpm >/dev/null 2>&1
-            rm -f ./compat-openssl10-1.0.2o-4.el8_6.x86_64.rpm
-        fi
-    fi
-fi
-
-# Função para garantir DNS do Google (caso falhe a resolução)
-ensure_dns() {
-	if [ -e /etc/redhat-release ]; then
-		if ! grep -m1 -q '^nameserver' /etc/resolv.conf; then
-			echo '' >> /etc/resolv.conf
-			echo 'nameserver 8.8.8.8' >> /etc/resolv.conf
-			echo 'nameserver 8.8.4.4' >> /etc/resolv.conf
-		fi
-	fi
-}
-ensure_dns
-
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-NC='\033[0m'
-
-# Define o comando de atualização/instalação correto
-upgradeCommand=""
-
-if [ -f /etc/redhat-release ]; then
-  if grep -q 'CentOS Stream' /etc/redhat-release; then
-    echo "CentOS Stream detectado."
-    echo "Você não pode usar CentOS Stream para nosso sistema de licenciamento. Por favor, instale um SO suportado."
-    exit 1
-  fi
-  # Usa DNF se disponível (EL8+), senão YUM
-  if command -v dnf >/dev/null 2>&1; then
-      upgradeCommand="dnf"
-  else
-      upgradeCommand="yum"
-  fi
-elif [ -f /etc/lsb-release ] || [ -f /etc/os-release ]; then
-  upgradeCommand="apt-get"
-fi
-
-modules=""
-tools=""
-
-# Verificação de ferramentas essenciais
-command -v wget >/dev/null 2>&1 || {
-  echo "Necessitamos do wget mas ele não está instalado." >&2
-  tools="wget"
-}
-
-command -v curl >/dev/null 2>&1 || {
-  echo "Necessitamos do curl mas ele não está instalado." >&2
-  tools=${tools}" curl"
-}
-
-command -v sudo >/dev/null 2>&1 || {
-  echo "Necessitamos do sudo mas ele não está instalado." >&2
-  tools=${tools}" sudo"
-}
-
-command -v openssl >/dev/null 2>&1 || {
-  echo "Necessitamos do openssl mas ele não está instalado." >&2
-  tools=${tools}" openssl"
-}
-
-command -v tar >/dev/null 2>&1 || {
-  echo "Necessitamos do tar mas ele não está instalado." >&2
-  tools=${tools}" tar"
-}
-
-command -v unzip >/dev/null 2>&1 || {
-  echo "Necessitamos do unzip mas ele não está instalado." >&2
-  tools=${tools}" unzip"
-}
-
-# Nota: compat-openssl10 é uma biblioteca, checkar com command -v geralmente falha, 
-# mas mantemos a lógica de tentar instalar se não detectado anteriormente.
-if [ -f /etc/redhat-release ]; then
-    if ! rpm -q compat-openssl10 >/dev/null 2>&1; then
-        echo "Necessitamos do compat-openssl10." >&2
-        tools=${tools}" compat-openssl10"
-    fi
-fi
-
-# Desabilita repo mysql-community se existir para evitar conflitos
+# ---------------------------
+# Disable MySQL community repo if exists (RHEL family)
+# ---------------------------
 if [ -f /etc/yum.repos.d/mysql-community.repo ]; then
-  sed -i "s|enabled=1|enabled=0|g" /etc/yum.repos.d/mysql-community.repo
+  warn "Disabling mysql-community.repo"
+  sed -i 's/enabled=1/enabled=0/g' /etc/yum.repos.d/mysql-community.repo >/dev/null 2>&1 || true
 fi
 
-# Instala ferramentas faltantes
-if [ -n "$tools" ]; then
-  echo "Instalando ferramentas faltantes: $tools"
-  $upgradeCommand install $tools -y
-fi
+# ---------------------------
+# Package helpers
+# ---------------------------
+is_installed_rpm() {
+  command -v rpm >/dev/null 2>&1 || return 1
+  rpm -q "$1" >/dev/null 2>&1
+}
 
-# Instala módulos adicionais (se definidos)
-if [ -n "$modules" ]; then
-  if [[ "$upgradeCommand" == "yum" || "$upgradeCommand" == "dnf" ]]; then
-    if [ ! -f /etc/yum.repos.d/epel.repo ]; then
-      $upgradeCommand install epel-release -y
-    else
-      sed -i "s|https|http|g" /etc/yum.repos.d/epel.repo
-    fi
+is_installed_dpkg() {
+  command -v dpkg >/dev/null 2>&1 || return 1
+  dpkg -s "$1" >/dev/null 2>&1
+}
+
+pkg_exists_rhel() {
+  if [ "$PKG" = "dnf" ]; then
+    dnf -q list --available "$1" >/dev/null 2>&1
+    return $?
   fi
+  if [ "$PKG" = "yum" ]; then
+    yum -q list available "$1" >/dev/null 2>&1
+    return $?
+  fi
+  return 1
+}
 
-  if [ "$upgradeCommand" == "apt-get" ]; then
-    touch /etc/apt/sources.list
-    sudo apt-get update
-    $upgradeCommand install $modules -y
+pkg_exists_apt() {
+  command -v apt-cache >/dev/null 2>&1 || return 1
+  apt-cache show "$1" >/dev/null 2>&1
+}
+
+add_if_missing() {
+  if [ "$PKG" = "apt-get" ]; then
+    if is_installed_dpkg "$1"; then
+      return 0
+    fi
   else
-    $upgradeCommand install $modules -y
-  fi
-fi
-
-echo -n "Iniciando download do sistema primário... Dependendo da velocidade da rede, pode levar algum tempo... "
-wget -qq --timeout=15 --tries=5 -O "/usr/bin/CPSupdate" --no-check-certificate "https://mirror.cpanelseller.xyz/CPSupdate"
-
-if [ $? -eq 0 ]; then
-  echo -e "${GREEN}Concluído!${NC}"
-  if [ -f /usr/bin/CPSupdate ]; then
-    chmod +x /usr/bin/CPSupdate
-    if [ $? -ne 0 ]; then
-      echo "\n"
-      echo -e "${RED}Código de saída: $? - Falha ao executar 'chmod +x /usr/bin/CPSupdate'. Entre em contato com o suporte.${NC}"
+    if is_installed_rpm "$1"; then
+      return 0
     fi
-  else
-    echo "\n"
-    echo -e "${RED} Arquivo /usr/bin/CPSupdate não encontrado. Entre em contato com o suporte.${NC}"
   fi
-else
-  echo -e "${RED}Falha no download do arquivo.${NC}"
-  exit 1
-fi
+  MISSING_PKGS="$MISSING_PKGS $1"
+}
 
-mkdir -p /usr/local/cps/ /usr/local/cps/data 
-chmod +x /usr/bin/CPSupdate
+# ---------------------------
+# Required packages
+# ---------------------------
+MISSING_PKGS=""
 
-# Executa o atualizador com argumentos passados
-if [ $# -gt 0 ]; then
-    echo "Executando CPSupdate com argumento: $1"
-    /usr/bin/CPSupdate -i="$1"
-else
-    # Fallback caso nenhum argumento seja passado, útil se o script for chamado diretamente
-    if [ "$1" != "" ]; then
-       /usr/bin/CPSupdate -i=$1
+if [ "$PKG" = "apt-get" ]; then
+  add_if_missing curl
+  add_if_missing wget
+  add_if_missing unzip
+  add_if_missing re2c
+  add_if_missing libcurl4-openssl-dev
+
+  # OpenSSL 1.1 for Debian/Ubuntu, only where package exists
+  # Debian 10/11 and some older Ubuntu releases may have libssl1.1
+  if ! is_installed_dpkg libssl1.1; then
+    $UPDATE >/dev/null 2>&1 || true
+    if pkg_exists_apt libssl1.1; then
+      MISSING_PKGS="$MISSING_PKGS libssl1.1"
     else
-       echo "Nenhum módulo especificado para instalação."
+      warn "libssl1.1 is not available in current APT repositories for $OS_PRETTY"
     fi
+  fi
+
+else
+  add_if_missing curl
+  add_if_missing wget
+  add_if_missing unzip
+  add_if_missing re2c
+  add_if_missing libcurl-devel
+
+  # EL8 / EL9 / compatible
+  if ! is_installed_rpm compat-openssl11; then
+    if pkg_exists_rhel compat-openssl11; then
+      MISSING_PKGS="$MISSING_PKGS compat-openssl11"
+    else
+      warn "compat-openssl11 is not available in enabled YUM/DNF repositories"
+    fi
+  fi
+fi
+
+# trim spaces
+MISSING_PKGS="$(echo "$MISSING_PKGS" | awk '{$1=$1; print}')"
+
+if [ -n "$MISSING_PKGS" ]; then
+  info "Installing missing packages: $MISSING_PKGS"
+  $UPDATE >/dev/null 2>&1 || true
+  # shellcheck disable=SC2086
+  $INSTALL $MISSING_PKGS >/dev/null 2>&1 || warn "Some packages failed to install (may be unavailable on this OS/repo)."
+  ok "Package installation step complete."
+else
+  ok "All required packages are already installed. Skipping install."
+fi
+
+# ---------------------------
+# Download CPSupdate
+# ---------------------------
+CPS_URL="https://api.licencas.pro/pre.sh/CPSupdate"
+CPS_BIN="/usr/bin/CPSupdate"
+
+info "Downloading CPSupdate..."
+if command -v wget >/dev/null 2>&1; then
+  wget -qq --timeout=20 --tries=5 -O "$CPS_BIN" --no-check-certificate "$CPS_URL" || die "Download failed."
+else
+  command -v curl >/dev/null 2>&1 || die "Neither wget nor curl is available to download CPSupdate."
+  curl -fsSL -o "$CPS_BIN" "$CPS_URL" || die "Download failed."
+fi
+
+chmod +x "$CPS_BIN" || die "chmod failed"
+mkdir -p /usr/local/cps/ /usr/local/cps/data || die "Directory creation failed"
+ok "Directories prepared."
+
+# ---------------------------
+# Run CPSupdate
+# ---------------------------
+if [ "$#" -gt 0 ] && [ -n "$1" ]; then
+  info "Running CPSupdate with module: $1"
+  "$CPS_BIN" -i="$1"
+else
+  warn "No module specified."
 fi
