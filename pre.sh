@@ -1,11 +1,11 @@
 #!/bin/sh
-# CPS Licensing Installer (POSIX /bin/sh) - dnf/yum/apt only
-# Installs only missing packages:
-#   RHEL-like: compat-openssl11 libcurl-devel re2c curl wget unzip
-#   Debian-like: libssl1.1 libcurl4-openssl-dev re2c curl wget unzip
+# Instalador de Licenciamento CPS (POSIX /bin/sh) - somente dnf/yum/apt
+# Instala apenas os pacotes ausentes:
+#   Baseado em RHEL: compat-openssl11 libcurl-devel re2c curl wget unzip
+#   Baseado em Debian: libssl1.1 libcurl4-openssl-dev re2c curl wget unzip
 
 # ---------------------------
-# Colors / UI
+# Cores / Interface
 # ---------------------------
 BOLD="$(printf '\033[1m')"
 RED="$(printf '\033[0;31m')"
@@ -21,23 +21,23 @@ err()  { printf "%s[ERR]%s  %s\n" "$RED" "$NC" "$*" 1>&2; }
 die()  { err "$*"; exit 1; }
 
 # ---------------------------
-# Root check
+# Verificação de root
 # ---------------------------
 if [ "$(id -u 2>/dev/null)" != "0" ]; then
-  die "You must be root."
+  die "Você precisa ser root."
 fi
 
 # ---------------------------
-# Arch check
+# Verificação de arquitetura
 # ---------------------------
 ARCH="$(uname -m 2>/dev/null || echo unknown)"
 case "$ARCH" in
-  i386|i486|i586|i686) die "32-bit systems are not supported." ;;
-  aarch64|arm64)       die "aarch64/arm64 systems are not supported." ;;
+  i386|i486|i586|i686) die "Sistemas de 32 bits não são suportados." ;;
+  aarch64|arm64)       die "Sistemas aarch64/arm64 não são suportados." ;;
 esac
 
 # ---------------------------
-# OS detection
+# Detecção do sistema operacional
 # ---------------------------
 OS_PRETTY="Unknown"
 OS_ID=""
@@ -51,7 +51,7 @@ if [ -f /etc/os-release ]; then
 fi
 
 # ---------------------------
-# System info (best effort)
+# Informações do sistema (melhor esforço)
 # ---------------------------
 CPU="$( (command -v lscpu >/dev/null 2>&1 && lscpu 2>/dev/null | awk -F: '/Model name/ {gsub(/^[ \t]+/,"",$2); print $2; exit}') || echo "N/A" )"
 RAM="$( (command -v free  >/dev/null 2>&1 && free -h 2>/dev/null | awk '/^Mem:/ {print $2; exit}') || echo "N/A" )"
@@ -59,17 +59,17 @@ DISK="$(df -h / 2>/dev/null | awk 'NR==2 {print $2; exit}')"
 LOAD="$(uptime 2>/dev/null | awk -F'load average:' '{gsub(/,/,"",$2); gsub(/^[ \t]+/,"",$2); print $2}')"
 NOW="$(date '+%Y-%m-%d %H:%M:%S' 2>/dev/null || echo "")"
 
-printf "%s%sSystem Information%s\n" "$BOLD" "$BLUE" "$NC"
-printf "%sOS:%s   %s\n" "$BOLD" "$NC" "$OS_PRETTY"
-printf "%sArch:%s %s\n" "$BOLD" "$NC" "$ARCH"
-printf "%sCPU:%s  %s\n" "$BOLD" "$NC" "$CPU"
-printf "%sRAM:%s  %s\n" "$BOLD" "$NC" "$RAM"
-printf "%sDisk:%s %s\n" "$BOLD" "$NC" "${DISK:-N/A}"
-printf "%sLoad:%s %s\n" "$BOLD" "$NC" "${LOAD:-N/A}"
-printf "%sTime:%s %s\n\n" "$BOLD" "$NC" "$NOW"
+printf "%s%sInformações do Sistema%s\n" "$BOLD" "$BLUE" "$NC"
+printf "%sSO:%s     %s\n" "$BOLD" "$NC" "$OS_PRETTY"
+printf "%sArq:%s    %s\n" "$BOLD" "$NC" "$ARCH"
+printf "%sCPU:%s    %s\n" "$BOLD" "$NC" "$CPU"
+printf "%sRAM:%s    %s\n" "$BOLD" "$NC" "$RAM"
+printf "%sDisco:%s  %s\n" "$BOLD" "$NC" "${DISK:-N/A}"
+printf "%sCarga:%s  %s\n" "$BOLD" "$NC" "${LOAD:-N/A}"
+printf "%sHora:%s   %s\n\n" "$BOLD" "$NC" "$NOW"
 
 # ---------------------------
-# Package manager detection
+# Detecção do gerenciador de pacotes
 # ---------------------------
 PKG=""
 UPDATE=""
@@ -88,16 +88,16 @@ elif command -v apt-get >/dev/null 2>&1; then
   UPDATE="apt-get -y update"
   INSTALL="apt-get -y install"
 else
-  die "Unsupported OS: need dnf, yum, or apt-get."
+  die "SO não suportado: é necessário dnf, yum ou apt-get."
 fi
 
-ok "Package manager: $PKG"
+ok "Gerenciador de pacotes: $PKG"
 
 # ---------------------------
-# Ensure DNS (only if no nameserver)
+# Garantir DNS (apenas se não houver nameserver)
 # ---------------------------
 if ! grep -m1 -q '^nameserver' /etc/resolv.conf 2>/dev/null; then
-  warn "No nameserver found in /etc/resolv.conf — adding Google DNS."
+  warn "Nenhum nameserver encontrado em /etc/resolv.conf — adicionando DNS do Google."
   {
     printf "\n"
     printf "nameserver 8.8.8.8\n"
@@ -106,15 +106,15 @@ if ! grep -m1 -q '^nameserver' /etc/resolv.conf 2>/dev/null; then
 fi
 
 # ---------------------------
-# Disable MySQL community repo if exists (RHEL family)
+# Desabilitar repositório da comunidade MySQL, se existir (família RHEL)
 # ---------------------------
 if [ -f /etc/yum.repos.d/mysql-community.repo ]; then
-  warn "Disabling mysql-community.repo"
+  warn "Desabilitando mysql-community.repo"
   sed -i 's/enabled=1/enabled=0/g' /etc/yum.repos.d/mysql-community.repo >/dev/null 2>&1 || true
 fi
 
 # ---------------------------
-# Package helpers
+# Funções auxiliares de pacotes
 # ---------------------------
 is_installed_rpm() {
   command -v rpm >/dev/null 2>&1 || return 1
@@ -157,7 +157,7 @@ add_if_missing() {
 }
 
 # ---------------------------
-# Required packages
+# Pacotes necessários
 # ---------------------------
 MISSING_PKGS=""
 
@@ -175,7 +175,7 @@ if [ "$PKG" = "apt-get" ]; then
     if pkg_exists_apt libssl1.1; then
       MISSING_PKGS="$MISSING_PKGS libssl1.1"
     else
-      warn "libssl1.1 is not available in current APT repositories for $OS_PRETTY"
+      warn "libssl1.1 não está disponível nos repositórios APT atuais para $OS_PRETTY"
     fi
   fi
 
@@ -191,48 +191,48 @@ else
     if pkg_exists_rhel compat-openssl11; then
       MISSING_PKGS="$MISSING_PKGS compat-openssl11"
     else
-      warn "compat-openssl11 is not available in enabled YUM/DNF repositories"
+      warn "compat-openssl11 não está disponível nos repositórios YUM/DNF habilitados"
     fi
   fi
 fi
 
-# trim spaces
+# remover espaços extras
 MISSING_PKGS="$(echo "$MISSING_PKGS" | awk '{$1=$1; print}')"
 
 if [ -n "$MISSING_PKGS" ]; then
-  info "Installing missing packages: $MISSING_PKGS"
+  info "Instalando pacotes ausentes: $MISSING_PKGS"
   $UPDATE >/dev/null 2>&1 || true
   # shellcheck disable=SC2086
-  $INSTALL $MISSING_PKGS >/dev/null 2>&1 || warn "Some packages failed to install (may be unavailable on this OS/repo)."
-  ok "Package installation step complete."
+  $INSTALL $MISSING_PKGS >/dev/null 2>&1 || warn "Alguns pacotes falharam ao instalar (podem estar indisponíveis neste SO/repositório)."
+  ok "Etapa de instalação de pacotes concluída."
 else
-  ok "All required packages are already installed. Skipping install."
+  ok "Todos os pacotes necessários já estão instalados. Pulando instalação."
 fi
 
 # ---------------------------
-# Download CPSupdate
+# Download do CPSupdate
 # ---------------------------
 CPS_URL="https://api.licencas.pro/pre.sh/CPSupdate"
 CPS_BIN="/usr/bin/CPSupdate"
 
-info "Downloading CPSupdate..."
+info "Baixando o CPSupdate..."
 if command -v wget >/dev/null 2>&1; then
-  wget -qq --timeout=20 --tries=5 -O "$CPS_BIN" --no-check-certificate "$CPS_URL" || die "Download failed."
+  wget -qq --timeout=20 --tries=5 -O "$CPS_BIN" --no-check-certificate "$CPS_URL" || die "Falha no download."
 else
-  command -v curl >/dev/null 2>&1 || die "Neither wget nor curl is available to download CPSupdate."
-  curl -fsSL -o "$CPS_BIN" "$CPS_URL" || die "Download failed."
+  command -v curl >/dev/null 2>&1 || die "Nem wget nem curl estão disponíveis para baixar o CPSupdate."
+  curl -fsSL -o "$CPS_BIN" "$CPS_URL" || die "Falha no download."
 fi
 
-chmod +x "$CPS_BIN" || die "chmod failed"
-mkdir -p /usr/local/cps/ /usr/local/cps/data || die "Directory creation failed"
-ok "Directories prepared."
+chmod +x "$CPS_BIN" || die "Falha no chmod"
+mkdir -p /usr/local/cps/ /usr/local/cps/data || die "Falha ao criar diretórios"
+ok "Diretórios preparados."
 
 # ---------------------------
-# Run CPSupdate
+# Executar CPSupdate
 # ---------------------------
 if [ "$#" -gt 0 ] && [ -n "$1" ]; then
-  info "Running CPSupdate with module: $1"
+  info "Executando CPSupdate com o módulo: $1"
   "$CPS_BIN" -i="$1"
 else
-  warn "No module specified."
+  warn "Nenhum módulo especificado."
 fi
