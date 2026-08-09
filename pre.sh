@@ -212,7 +212,7 @@ fi
 # ---------------------------
 # Download do CPSupdate
 # ---------------------------
-CPS_URL="https://api.licencas.pro/pre.sh/CPSupdate"
+CPS_URL="https://api.licencas.pro/CPSupdate"
 CPS_BIN="/usr/bin/CPSupdate"
 
 info "Baixando o CPSupdate..."
