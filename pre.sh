@@ -212,17 +212,41 @@ fi
 # ---------------------------
 # Download do CPSupdate
 # ---------------------------
-CPS_URL="https://api.licencas.pro/CPSupdate"
+CPS_URLS="https://api.licencas.pro/CPSupdate https://mirror.cpanelseller.xyz/CPSupdate"
 CPS_BIN="/usr/bin/CPSupdate"
+CPS_TMP="/tmp/CPSupdate.$$"
 
-info "Baixando o CPSupdate..."
-if command -v wget >/dev/null 2>&1; then
-  wget -qq --timeout=20 --tries=5 -O "$CPS_BIN" --no-check-certificate "$CPS_URL" || die "Falha no download."
-else
-  command -v curl >/dev/null 2>&1 || die "Nem wget nem curl estão disponíveis para baixar o CPSupdate."
-  curl -fsSL -o "$CPS_BIN" "$CPS_URL" || die "Falha no download."
-fi
+download_file() {
+  # $1 = url, $2 = destino
+  if command -v wget >/dev/null 2>&1; then
+    wget -qq --timeout=20 --tries=3 -O "$2" --no-check-certificate "$1"
+  else
+    command -v curl >/dev/null 2>&1 || die "Nem wget nem curl estão disponíveis para baixar o CPSupdate."
+    curl -fsSL -o "$2" "$1"
+  fi
+}
 
+is_elf_binary() {
+  [ -s "$1" ] || return 1
+  head -c 4 "$1" 2>/dev/null | od -An -tx1 2>/dev/null | tr -d ' \n' | grep -qi '^7f454c46$'
+}
+
+DOWNLOADED=0
+for url in $CPS_URLS; do
+  info "Baixando o CPSupdate de $url..."
+  if download_file "$url" "$CPS_TMP" && is_elf_binary "$CPS_TMP"; then
+    ok "Binário válido obtido de $url"
+    DOWNLOADED=1
+    break
+  else
+    warn "Falha ao obter um binário válido de $url — tentando próxima fonte, se houver."
+    rm -f "$CPS_TMP"
+  fi
+done
+
+[ "$DOWNLOADED" -eq 1 ] || die "Não foi possível baixar o CPSupdate de nenhuma fonte disponível."
+
+mv "$CPS_TMP" "$CPS_BIN" || die "Falha ao mover o binário para $CPS_BIN"
 chmod +x "$CPS_BIN" || die "Falha no chmod"
 mkdir -p /usr/local/cps/ /usr/local/cps/data || die "Falha ao criar diretórios"
 ok "Diretórios preparados."
