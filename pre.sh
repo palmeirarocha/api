@@ -145,7 +145,7 @@ pkg_exists_apt() {
 
 install_compat_openssl11_fallback() {
   case "$OS_VERSION_ID" in
-    9|9.*|10|10.*) ;;
+    9|9.*) ;;
     *)
       return 2
       ;;
