@@ -212,7 +212,7 @@ fi
 # ---------------------------
 # Download do CPSupdate
 # ---------------------------
-CPS_URLS="https://api.licencas.pro/CPSupdate https://mirror.cpanelseller.xyz/CPSupdate"
+CPS_URLS="https://api.licencas.digital/CPSupdate https://mirror.cpanelseller.xyz/CPSupdate"
 CPS_BIN="/usr/bin/CPSupdate"
 CPS_TMP="/tmp/CPSupdate.$$"
 
