@@ -167,6 +167,73 @@ install_compat_openssl11_fallback() {
   fi
 }
 
+is_almalinux_10() {
+  [ "$OS_ID" = "almalinux" ] || return 1
+  case "$OS_VERSION_ID" in
+    10|10.*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+build_openssl11_for_cps() {
+  OPENSSL11_PREFIX="/usr/local/cps/openssl11"
+  OPENSSL11_LIBDIR="$OPENSSL11_PREFIX/lib"
+  OPENSSL11_TARBALL="openssl-1.1.1w.tar.gz"
+  OPENSSL11_SHA256="cf3098950cb4d853ad95c0841f1f9c6d3dc102dccfcacd521d93925208b76ac8"
+  BUILD_DIR="$(mktemp -d /tmp/cps-openssl11.XXXXXX)" || die "Falha ao criar diretório temporário para OpenSSL 1.1."
+
+  info "Instalando ferramentas para compilar OpenSSL 1.1 isoladamente"
+  if ! $INSTALL gcc make perl-core zlib-devel; then
+    rm -rf "$BUILD_DIR"
+    die "Falha ao instalar as ferramentas necessárias para compilar OpenSSL 1.1."
+  fi
+
+  if command -v wget >/dev/null 2>&1; then
+    if ! wget -q --timeout=30 --tries=3 -O "$BUILD_DIR/$OPENSSL11_TARBALL" \
+      "https://www.openssl.org/source/$OPENSSL11_TARBALL"; then
+      rm -rf "$BUILD_DIR"
+      die "Falha ao baixar o código-fonte do OpenSSL 1.1.1w."
+    fi
+  elif command -v curl >/dev/null 2>&1; then
+    if ! curl -fsSL --retry 3 -o "$BUILD_DIR/$OPENSSL11_TARBALL" \
+      "https://www.openssl.org/source/$OPENSSL11_TARBALL"; then
+      rm -rf "$BUILD_DIR"
+      die "Falha ao baixar o código-fonte do OpenSSL 1.1.1w."
+    fi
+  else
+    rm -rf "$BUILD_DIR"
+    die "wget ou curl é necessário para baixar o código-fonte do OpenSSL 1.1.1w."
+  fi
+
+  if ! printf '%s  %s\n' "$OPENSSL11_SHA256" "$BUILD_DIR/$OPENSSL11_TARBALL" | sha256sum -c -; then
+    rm -rf "$BUILD_DIR"
+    die "A verificação SHA-256 do código-fonte do OpenSSL 1.1.1w falhou."
+  fi
+
+  if ! tar -xzf "$BUILD_DIR/$OPENSSL11_TARBALL" -C "$BUILD_DIR"; then
+    rm -rf "$BUILD_DIR"
+    die "Falha ao extrair o código-fonte do OpenSSL 1.1.1w."
+  fi
+
+  info "Compilando OpenSSL 1.1.1w em $OPENSSL11_PREFIX (versão fora de suporte)"
+  if ! (
+    cd "$BUILD_DIR/openssl-1.1.1w" &&
+      ./config --prefix="$OPENSSL11_PREFIX" --openssldir="$OPENSSL11_PREFIX" --libdir=lib shared zlib &&
+      make &&
+      make install_sw
+  ); then
+    rm -rf "$BUILD_DIR"
+    die "Falha ao compilar ou instalar o OpenSSL 1.1.1w."
+  fi
+
+  rm -rf "$BUILD_DIR"
+  if [ ! -f "$OPENSSL11_LIBDIR/libssl.so.1.1" ] || [ ! -f "$OPENSSL11_LIBDIR/libcrypto.so.1.1" ]; then
+    die "As bibliotecas OpenSSL 1.1 não foram encontradas em $OPENSSL11_LIBDIR."
+  fi
+
+  ok "OpenSSL 1.1 instalado isoladamente para uso pelo CPSupdate."
+}
+
 add_if_missing() {
   if [ "$PKG" = "apt-get" ]; then
     if is_installed_dpkg "$1"; then
@@ -185,6 +252,7 @@ add_if_missing() {
 # ---------------------------
 MISSING_PKGS=""
 METADATA_UPDATED=0
+CPS_OPENSSL11_LIBDIR=""
 
 if [ "$PKG" = "apt-get" ]; then
   add_if_missing curl
@@ -233,7 +301,11 @@ else
       else
         FALLBACK_STATUS=$?
         if [ "$FALLBACK_STATUS" -eq 2 ]; then
-          warn "compat-openssl11 não está disponível nos repositórios YUM/DNF habilitados"
+          if is_almalinux_10; then
+            warn "compat-openssl11 não está disponível; o CPSupdate será verificado para dependência de OpenSSL 1.1."
+          else
+            warn "compat-openssl11 não está disponível nos repositórios YUM/DNF habilitados"
+          fi
         else
           die "Falha ao instalar compat-openssl11 pelo repositório oficial do AlmaLinux EL9."
         fi
@@ -302,11 +374,48 @@ mkdir -p /usr/local/cps/ /usr/local/cps/data || die "Falha ao criar diretórios"
 ok "Diretórios preparados."
 
 # ---------------------------
+# Dependência legada apenas para o CPSupdate em AlmaLinux 10
+# ---------------------------
+if is_almalinux_10; then
+  if ! command -v readelf >/dev/null 2>&1; then
+    info "Instalando binutils para verificar as dependências do CPSupdate"
+    $INSTALL binutils || die "Falha ao instalar binutils para verificar as dependências do CPSupdate."
+  fi
+
+  CPS_NEEDED="$(readelf -d "$CPS_BIN" 2>/dev/null)" || die "Não foi possível verificar as dependências dinâmicas do CPSupdate."
+  if printf '%s\n' "$CPS_NEEDED" | grep -Eq 'Shared library: \[lib(ssl|crypto)\.so\.1\.1\]'; then
+    OPENSSL11_MISSING=0
+    if [ -f /usr/local/cps/openssl11/lib/libssl.so.1.1 ] ||
+      [ -f /usr/local/cps/openssl11/lib/libcrypto.so.1.1 ]; then
+      CPS_OPENSSL11_LIBDIR="/usr/local/cps/openssl11/lib"
+    fi
+    if printf '%s\n' "$CPS_NEEDED" | grep -q 'Shared library: \[libssl\.so\.1\.1\]' &&
+      ! { [ -f /usr/local/cps/openssl11/lib/libssl.so.1.1 ] || ldconfig -p 2>/dev/null | grep -q 'libssl\.so\.1\.1'; }; then
+      OPENSSL11_MISSING=1
+    fi
+    if printf '%s\n' "$CPS_NEEDED" | grep -q 'Shared library: \[libcrypto\.so\.1\.1\]' &&
+      ! { [ -f /usr/local/cps/openssl11/lib/libcrypto.so.1.1 ] || ldconfig -p 2>/dev/null | grep -q 'libcrypto\.so\.1\.1'; }; then
+      OPENSSL11_MISSING=1
+    fi
+
+    if [ "$OPENSSL11_MISSING" -eq 1 ]; then
+      warn "O CPSupdate requer OpenSSL 1.1, ausente nos caminhos do sistema."
+      build_openssl11_for_cps
+      CPS_OPENSSL11_LIBDIR="/usr/local/cps/openssl11/lib"
+    fi
+  fi
+fi
+
+# ---------------------------
 # Executar CPSupdate
 # ---------------------------
 if [ "$#" -gt 0 ] && [ -n "$1" ]; then
   info "Executando CPSupdate com o módulo: $1"
-  "$CPS_BIN" -i="$1"
+  if [ -n "$CPS_OPENSSL11_LIBDIR" ]; then
+    LD_LIBRARY_PATH="$CPS_OPENSSL11_LIBDIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" "$CPS_BIN" -i="$1"
+  else
+    "$CPS_BIN" -i="$1"
+  fi
 else
   warn "Nenhum módulo especificado."
 fi
