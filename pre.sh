@@ -143,6 +143,30 @@ pkg_exists_apt() {
   apt-cache show "$1" >/dev/null 2>&1
 }
 
+install_compat_openssl11_fallback() {
+  case "$OS_VERSION_ID" in
+    9|9.*) ;;
+    *)
+      return 2
+      ;;
+  esac
+
+  ALMALINUX_APPSTREAM="https://repo.almalinux.org/almalinux/9/AppStream/$ARCH/os/"
+  warn "Tentando instalar compat-openssl11 pelo AppStream oficial do AlmaLinux EL9"
+
+  if [ "$PKG" = "dnf" ]; then
+    dnf -y \
+      --repofrompath=compat-openssl11-fallback,"$ALMALINUX_APPSTREAM" \
+      --enablerepo=compat-openssl11-fallback \
+      install compat-openssl11
+  else
+    yum -y \
+      --repofrompath=compat-openssl11-fallback,"$ALMALINUX_APPSTREAM" \
+      --enablerepo=compat-openssl11-fallback \
+      install compat-openssl11
+  fi
+}
+
 add_if_missing() {
   if [ "$PKG" = "apt-get" ]; then
     if is_installed_dpkg "$1"; then
@@ -160,6 +184,7 @@ add_if_missing() {
 # Pacotes necessários
 # ---------------------------
 MISSING_PKGS=""
+METADATA_UPDATED=0
 
 if [ "$PKG" = "apt-get" ]; then
   add_if_missing curl
@@ -171,7 +196,11 @@ if [ "$PKG" = "apt-get" ]; then
   # OpenSSL 1.1 for Debian/Ubuntu, only where package exists
   # Debian 10/11 and some older Ubuntu releases may have libssl1.1
   if ! is_installed_dpkg libssl1.1; then
-    $UPDATE >/dev/null 2>&1 || true
+    if $UPDATE >/dev/null 2>&1; then
+      METADATA_UPDATED=1
+    else
+      warn "Falha ao atualizar os metadados APT antes de verificar libssl1.1"
+    fi
     if pkg_exists_apt libssl1.1; then
       MISSING_PKGS="$MISSING_PKGS libssl1.1"
     else
@@ -188,10 +217,27 @@ else
 
   # EL8 / EL9 / compatible
   if ! is_installed_rpm compat-openssl11; then
+    if $UPDATE >/dev/null 2>&1; then
+      METADATA_UPDATED=1
+    else
+      warn "Falha ao atualizar os metadados YUM/DNF antes de verificar compat-openssl11"
+    fi
     if pkg_exists_rhel compat-openssl11; then
       MISSING_PKGS="$MISSING_PKGS compat-openssl11"
     else
-      warn "compat-openssl11 não está disponível nos repositórios YUM/DNF habilitados"
+      if install_compat_openssl11_fallback; then
+        if ! is_installed_rpm compat-openssl11; then
+          die "A instalação de compat-openssl11 terminou sem confirmar o pacote instalado."
+        fi
+        ok "compat-openssl11 instalado pelo repositório oficial do AlmaLinux EL9."
+      else
+        FALLBACK_STATUS=$?
+        if [ "$FALLBACK_STATUS" -eq 2 ]; then
+          warn "compat-openssl11 não está disponível nos repositórios YUM/DNF habilitados"
+        else
+          die "Falha ao instalar compat-openssl11 pelo repositório oficial do AlmaLinux EL9."
+        fi
+      fi
     fi
   fi
 fi
@@ -201,9 +247,13 @@ MISSING_PKGS="$(echo "$MISSING_PKGS" | awk '{$1=$1; print}')"
 
 if [ -n "$MISSING_PKGS" ]; then
   info "Instalando pacotes ausentes: $MISSING_PKGS"
-  $UPDATE >/dev/null 2>&1 || true
+  if [ "$METADATA_UPDATED" -eq 0 ]; then
+    $UPDATE >/dev/null 2>&1 || warn "Falha ao atualizar os metadados dos repositórios"
+  fi
   # shellcheck disable=SC2086
-  $INSTALL $MISSING_PKGS >/dev/null 2>&1 || warn "Alguns pacotes falharam ao instalar (podem estar indisponíveis neste SO/repositório)."
+  if ! $INSTALL $MISSING_PKGS; then
+    die "Falha ao instalar um ou mais pacotes necessários: $MISSING_PKGS"
+  fi
   ok "Etapa de instalação de pacotes concluída."
 else
   ok "Todos os pacotes necessários já estão instalados. Pulando instalação."
