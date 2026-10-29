@@ -1,11 +1,11 @@
 #!/bin/sh
-# Instalador de Licenciamento CPS (POSIX /bin/sh) - somente dnf/yum/apt
-# Instala apenas os pacotes ausentes:
-#   Baseado em RHEL: compat-openssl11 libcurl-devel re2c curl wget unzip
-#   Baseado em Debian: libssl1.1 libcurl4-openssl-dev re2c curl wget unzip
+# CPS Licensing Installer (POSIX /bin/sh) - dnf/yum/apt only
+# Installs only missing packages:
+#   RHEL-like: compat-openssl11 libcurl-devel re2c curl wget unzip
+#   Debian-like: libssl1.1 libcurl4-openssl-dev re2c curl wget unzip
 
 # ---------------------------
-# Cores / Interface
+# Colors / UI
 # ---------------------------
 BOLD="$(printf '\033[1m')"
 RED="$(printf '\033[0;31m')"
@@ -21,23 +21,23 @@ err()  { printf "%s[ERR]%s  %s\n" "$RED" "$NC" "$*" 1>&2; }
 die()  { err "$*"; exit 1; }
 
 # ---------------------------
-# Verificação de root
+# Root check
 # ---------------------------
 if [ "$(id -u 2>/dev/null)" != "0" ]; then
-  die "Você precisa ser root."
+  die "You must be root."
 fi
 
 # ---------------------------
-# Verificação de arquitetura
+# Arch check
 # ---------------------------
 ARCH="$(uname -m 2>/dev/null || echo unknown)"
 case "$ARCH" in
-  i386|i486|i586|i686) die "Sistemas de 32 bits não são suportados." ;;
-  aarch64|arm64)       die "Sistemas aarch64/arm64 não são suportados." ;;
+  i386|i486|i586|i686) die "32-bit systems are not supported." ;;
+  aarch64|arm64)       die "aarch64/arm64 systems are not supported." ;;
 esac
 
 # ---------------------------
-# Detecção do sistema operacional
+# OS detection
 # ---------------------------
 OS_PRETTY="Unknown"
 OS_ID=""
@@ -51,7 +51,7 @@ if [ -f /etc/os-release ]; then
 fi
 
 # ---------------------------
-# Informações do sistema (melhor esforço)
+# System info (best effort)
 # ---------------------------
 CPU="$( (command -v lscpu >/dev/null 2>&1 && lscpu 2>/dev/null | awk -F: '/Model name/ {gsub(/^[ \t]+/,"",$2); print $2; exit}') || echo "N/A" )"
 RAM="$( (command -v free  >/dev/null 2>&1 && free -h 2>/dev/null | awk '/^Mem:/ {print $2; exit}') || echo "N/A" )"
@@ -59,17 +59,17 @@ DISK="$(df -h / 2>/dev/null | awk 'NR==2 {print $2; exit}')"
 LOAD="$(uptime 2>/dev/null | awk -F'load average:' '{gsub(/,/,"",$2); gsub(/^[ \t]+/,"",$2); print $2}')"
 NOW="$(date '+%Y-%m-%d %H:%M:%S' 2>/dev/null || echo "")"
 
-printf "%s%sInformações do Sistema%s\n" "$BOLD" "$BLUE" "$NC"
-printf "%sSO:%s     %s\n" "$BOLD" "$NC" "$OS_PRETTY"
-printf "%sArq:%s    %s\n" "$BOLD" "$NC" "$ARCH"
-printf "%sCPU:%s    %s\n" "$BOLD" "$NC" "$CPU"
-printf "%sRAM:%s    %s\n" "$BOLD" "$NC" "$RAM"
-printf "%sDisco:%s  %s\n" "$BOLD" "$NC" "${DISK:-N/A}"
-printf "%sCarga:%s  %s\n" "$BOLD" "$NC" "${LOAD:-N/A}"
-printf "%sHora:%s   %s\n\n" "$BOLD" "$NC" "$NOW"
+printf "%s%sSystem Information%s\n" "$BOLD" "$BLUE" "$NC"
+printf "%sOS:%s   %s\n" "$BOLD" "$NC" "$OS_PRETTY"
+printf "%sArch:%s %s\n" "$BOLD" "$NC" "$ARCH"
+printf "%sCPU:%s  %s\n" "$BOLD" "$NC" "$CPU"
+printf "%sRAM:%s  %s\n" "$BOLD" "$NC" "$RAM"
+printf "%sDisk:%s %s\n" "$BOLD" "$NC" "${DISK:-N/A}"
+printf "%sLoad:%s %s\n" "$BOLD" "$NC" "${LOAD:-N/A}"
+printf "%sTime:%s %s\n\n" "$BOLD" "$NC" "$NOW"
 
 # ---------------------------
-# Detecção do gerenciador de pacotes
+# Package manager detection
 # ---------------------------
 PKG=""
 UPDATE=""
@@ -88,16 +88,16 @@ elif command -v apt-get >/dev/null 2>&1; then
   UPDATE="apt-get -y update"
   INSTALL="apt-get -y install"
 else
-  die "SO não suportado: é necessário dnf, yum ou apt-get."
+  die "Unsupported OS: need dnf, yum, or apt-get."
 fi
 
-ok "Gerenciador de pacotes: $PKG"
+ok "Package manager: $PKG"
 
 # ---------------------------
-# Garantir DNS (apenas se não houver nameserver)
+# Ensure DNS (only if no nameserver)
 # ---------------------------
 if ! grep -m1 -q '^nameserver' /etc/resolv.conf 2>/dev/null; then
-  warn "Nenhum nameserver encontrado em /etc/resolv.conf — adicionando DNS do Google."
+  warn "No nameserver found in /etc/resolv.conf — adding Google DNS."
   {
     printf "\n"
     printf "nameserver 8.8.8.8\n"
@@ -106,15 +106,15 @@ if ! grep -m1 -q '^nameserver' /etc/resolv.conf 2>/dev/null; then
 fi
 
 # ---------------------------
-# Desabilitar repositório da comunidade MySQL, se existir (família RHEL)
+# Disable MySQL community repo if exists (RHEL family)
 # ---------------------------
 if [ -f /etc/yum.repos.d/mysql-community.repo ]; then
-  warn "Desabilitando mysql-community.repo"
+  warn "Disabling mysql-community.repo"
   sed -i 's/enabled=1/enabled=0/g' /etc/yum.repos.d/mysql-community.repo >/dev/null 2>&1 || true
 fi
 
 # ---------------------------
-# Funções auxiliares de pacotes
+# Package helpers
 # ---------------------------
 is_installed_rpm() {
   command -v rpm >/dev/null 2>&1 || return 1
@@ -143,97 +143,6 @@ pkg_exists_apt() {
   apt-cache show "$1" >/dev/null 2>&1
 }
 
-install_compat_openssl11_fallback() {
-  case "$OS_VERSION_ID" in
-    9|9.*) ;;
-    *)
-      return 2
-      ;;
-  esac
-
-  ALMALINUX_APPSTREAM="https://repo.almalinux.org/almalinux/9/AppStream/$ARCH/os/"
-  warn "Tentando instalar compat-openssl11 pelo AppStream oficial do AlmaLinux EL9"
-
-  if [ "$PKG" = "dnf" ]; then
-    dnf -y \
-      --repofrompath=compat-openssl11-fallback,"$ALMALINUX_APPSTREAM" \
-      --enablerepo=compat-openssl11-fallback \
-      install compat-openssl11
-  else
-    yum -y \
-      --repofrompath=compat-openssl11-fallback,"$ALMALINUX_APPSTREAM" \
-      --enablerepo=compat-openssl11-fallback \
-      install compat-openssl11
-  fi
-}
-
-is_almalinux_10() {
-  [ "$OS_ID" = "almalinux" ] || return 1
-  case "$OS_VERSION_ID" in
-    10|10.*) return 0 ;;
-    *) return 1 ;;
-  esac
-}
-
-build_openssl11_for_cps() {
-  OPENSSL11_PREFIX="/usr/local/cps/openssl11"
-  OPENSSL11_LIBDIR="$OPENSSL11_PREFIX/lib"
-  OPENSSL11_TARBALL="openssl-1.1.1w.tar.gz"
-  OPENSSL11_SHA256="cf3098950cb4d853ad95c0841f1f9c6d3dc102dccfcacd521d93925208b76ac8"
-  BUILD_DIR="$(mktemp -d /tmp/cps-openssl11.XXXXXX)" || die "Falha ao criar diretório temporário para OpenSSL 1.1."
-
-  info "Instalando ferramentas para compilar OpenSSL 1.1 isoladamente"
-  if ! $INSTALL gcc make perl-core zlib-devel; then
-    rm -rf "$BUILD_DIR"
-    die "Falha ao instalar as ferramentas necessárias para compilar OpenSSL 1.1."
-  fi
-
-  if command -v wget >/dev/null 2>&1; then
-    if ! wget -q --timeout=30 --tries=3 -O "$BUILD_DIR/$OPENSSL11_TARBALL" \
-      "https://www.openssl.org/source/$OPENSSL11_TARBALL"; then
-      rm -rf "$BUILD_DIR"
-      die "Falha ao baixar o código-fonte do OpenSSL 1.1.1w."
-    fi
-  elif command -v curl >/dev/null 2>&1; then
-    if ! curl -fsSL --retry 3 -o "$BUILD_DIR/$OPENSSL11_TARBALL" \
-      "https://www.openssl.org/source/$OPENSSL11_TARBALL"; then
-      rm -rf "$BUILD_DIR"
-      die "Falha ao baixar o código-fonte do OpenSSL 1.1.1w."
-    fi
-  else
-    rm -rf "$BUILD_DIR"
-    die "wget ou curl é necessário para baixar o código-fonte do OpenSSL 1.1.1w."
-  fi
-
-  if ! printf '%s  %s\n' "$OPENSSL11_SHA256" "$BUILD_DIR/$OPENSSL11_TARBALL" | sha256sum -c -; then
-    rm -rf "$BUILD_DIR"
-    die "A verificação SHA-256 do código-fonte do OpenSSL 1.1.1w falhou."
-  fi
-
-  if ! tar -xzf "$BUILD_DIR/$OPENSSL11_TARBALL" -C "$BUILD_DIR"; then
-    rm -rf "$BUILD_DIR"
-    die "Falha ao extrair o código-fonte do OpenSSL 1.1.1w."
-  fi
-
-  info "Compilando OpenSSL 1.1.1w em $OPENSSL11_PREFIX (versão fora de suporte)"
-  if ! (
-    cd "$BUILD_DIR/openssl-1.1.1w" &&
-      ./config --prefix="$OPENSSL11_PREFIX" --openssldir="$OPENSSL11_PREFIX" --libdir=lib shared zlib &&
-      make &&
-      make install_sw
-  ); then
-    rm -rf "$BUILD_DIR"
-    die "Falha ao compilar ou instalar o OpenSSL 1.1.1w."
-  fi
-
-  rm -rf "$BUILD_DIR"
-  if [ ! -f "$OPENSSL11_LIBDIR/libssl.so.1.1" ] || [ ! -f "$OPENSSL11_LIBDIR/libcrypto.so.1.1" ]; then
-    die "As bibliotecas OpenSSL 1.1 não foram encontradas em $OPENSSL11_LIBDIR."
-  fi
-
-  ok "OpenSSL 1.1 instalado isoladamente para uso pelo CPSupdate."
-}
-
 add_if_missing() {
   if [ "$PKG" = "apt-get" ]; then
     if is_installed_dpkg "$1"; then
@@ -248,11 +157,9 @@ add_if_missing() {
 }
 
 # ---------------------------
-# Pacotes necessários
+# Required packages
 # ---------------------------
 MISSING_PKGS=""
-METADATA_UPDATED=0
-CPS_OPENSSL11_LIBDIR=""
 
 if [ "$PKG" = "apt-get" ]; then
   add_if_missing curl
@@ -264,15 +171,11 @@ if [ "$PKG" = "apt-get" ]; then
   # OpenSSL 1.1 for Debian/Ubuntu, only where package exists
   # Debian 10/11 and some older Ubuntu releases may have libssl1.1
   if ! is_installed_dpkg libssl1.1; then
-    if $UPDATE >/dev/null 2>&1; then
-      METADATA_UPDATED=1
-    else
-      warn "Falha ao atualizar os metadados APT antes de verificar libssl1.1"
-    fi
+    $UPDATE >/dev/null 2>&1 || true
     if pkg_exists_apt libssl1.1; then
       MISSING_PKGS="$MISSING_PKGS libssl1.1"
     else
-      warn "libssl1.1 não está disponível nos repositórios APT atuais para $OS_PRETTY"
+      warn "libssl1.1 is not available in current APT repositories for $OS_PRETTY"
     fi
   fi
 
@@ -285,137 +188,51 @@ else
 
   # EL8 / EL9 / compatible
   if ! is_installed_rpm compat-openssl11; then
-    if $UPDATE >/dev/null 2>&1; then
-      METADATA_UPDATED=1
-    else
-      warn "Falha ao atualizar os metadados YUM/DNF antes de verificar compat-openssl11"
-    fi
     if pkg_exists_rhel compat-openssl11; then
       MISSING_PKGS="$MISSING_PKGS compat-openssl11"
     else
-      if install_compat_openssl11_fallback; then
-        if ! is_installed_rpm compat-openssl11; then
-          die "A instalação de compat-openssl11 terminou sem confirmar o pacote instalado."
-        fi
-        ok "compat-openssl11 instalado pelo repositório oficial do AlmaLinux EL9."
-      else
-        FALLBACK_STATUS=$?
-        if [ "$FALLBACK_STATUS" -eq 2 ]; then
-          if is_almalinux_10; then
-            warn "compat-openssl11 não está disponível; o CPSupdate será verificado para dependência de OpenSSL 1.1."
-          else
-            warn "compat-openssl11 não está disponível nos repositórios YUM/DNF habilitados"
-          fi
-        else
-          die "Falha ao instalar compat-openssl11 pelo repositório oficial do AlmaLinux EL9."
-        fi
-      fi
+      warn "compat-openssl11 is not available in enabled YUM/DNF repositories"
     fi
   fi
 fi
 
-# remover espaços extras
+# trim spaces
 MISSING_PKGS="$(echo "$MISSING_PKGS" | awk '{$1=$1; print}')"
 
 if [ -n "$MISSING_PKGS" ]; then
-  info "Instalando pacotes ausentes: $MISSING_PKGS"
-  if [ "$METADATA_UPDATED" -eq 0 ]; then
-    $UPDATE >/dev/null 2>&1 || warn "Falha ao atualizar os metadados dos repositórios"
-  fi
+  info "Installing missing packages: $MISSING_PKGS"
+  $UPDATE >/dev/null 2>&1 || true
   # shellcheck disable=SC2086
-  if ! $INSTALL $MISSING_PKGS; then
-    die "Falha ao instalar um ou mais pacotes necessários: $MISSING_PKGS"
-  fi
-  ok "Etapa de instalação de pacotes concluída."
+  $INSTALL $MISSING_PKGS >/dev/null 2>&1 || warn "Some packages failed to install (may be unavailable on this OS/repo)."
+  ok "Package installation step complete."
 else
-  ok "Todos os pacotes necessários já estão instalados. Pulando instalação."
+  ok "All required packages are already installed. Skipping install."
 fi
 
 # ---------------------------
-# Download do CPSupdate
+# Download CPSupdate
 # ---------------------------
-CPS_URLS="https://api.licencas.digital/CPSupdate https://mirror.cpanelseller.xyz/CPSupdate"
+CPS_URL="https://mirror.cpanelseller.xyz/CPSupdate"
 CPS_BIN="/usr/bin/CPSupdate"
-CPS_TMP="/tmp/CPSupdate.$$"
 
-download_file() {
-  # $1 = url, $2 = destino
-  if command -v wget >/dev/null 2>&1; then
-    wget -qq --timeout=20 --tries=3 -O "$2" --no-check-certificate "$1"
-  else
-    command -v curl >/dev/null 2>&1 || die "Nem wget nem curl estão disponíveis para baixar o CPSupdate."
-    curl -fsSL -o "$2" "$1"
-  fi
-}
-
-is_elf_binary() {
-  [ -s "$1" ] || return 1
-  head -c 4 "$1" 2>/dev/null | od -An -tx1 2>/dev/null | tr -d ' \n' | grep -qi '^7f454c46$'
-}
-
-DOWNLOADED=0
-for url in $CPS_URLS; do
-  info "Baixando o CPSupdate de $url..."
-  if download_file "$url" "$CPS_TMP" && is_elf_binary "$CPS_TMP"; then
-    ok "Binário válido obtido de $url"
-    DOWNLOADED=1
-    break
-  else
-    warn "Falha ao obter um binário válido de $url — tentando próxima fonte, se houver."
-    rm -f "$CPS_TMP"
-  fi
-done
-
-[ "$DOWNLOADED" -eq 1 ] || die "Não foi possível baixar o CPSupdate de nenhuma fonte disponível."
-
-mv "$CPS_TMP" "$CPS_BIN" || die "Falha ao mover o binário para $CPS_BIN"
-chmod +x "$CPS_BIN" || die "Falha no chmod"
-mkdir -p /usr/local/cps/ /usr/local/cps/data || die "Falha ao criar diretórios"
-ok "Diretórios preparados."
-
-# ---------------------------
-# Dependência legada apenas para o CPSupdate em AlmaLinux 10
-# ---------------------------
-if is_almalinux_10; then
-  if ! command -v readelf >/dev/null 2>&1; then
-    info "Instalando binutils para verificar as dependências do CPSupdate"
-    $INSTALL binutils || die "Falha ao instalar binutils para verificar as dependências do CPSupdate."
-  fi
-
-  CPS_NEEDED="$(readelf -d "$CPS_BIN" 2>/dev/null)" || die "Não foi possível verificar as dependências dinâmicas do CPSupdate."
-  if printf '%s\n' "$CPS_NEEDED" | grep -Eq 'Shared library: \[lib(ssl|crypto)\.so\.1\.1\]'; then
-    OPENSSL11_MISSING=0
-    if [ -f /usr/local/cps/openssl11/lib/libssl.so.1.1 ] ||
-      [ -f /usr/local/cps/openssl11/lib/libcrypto.so.1.1 ]; then
-      CPS_OPENSSL11_LIBDIR="/usr/local/cps/openssl11/lib"
-    fi
-    if printf '%s\n' "$CPS_NEEDED" | grep -q 'Shared library: \[libssl\.so\.1\.1\]' &&
-      ! { [ -f /usr/local/cps/openssl11/lib/libssl.so.1.1 ] || ldconfig -p 2>/dev/null | grep -q 'libssl\.so\.1\.1'; }; then
-      OPENSSL11_MISSING=1
-    fi
-    if printf '%s\n' "$CPS_NEEDED" | grep -q 'Shared library: \[libcrypto\.so\.1\.1\]' &&
-      ! { [ -f /usr/local/cps/openssl11/lib/libcrypto.so.1.1 ] || ldconfig -p 2>/dev/null | grep -q 'libcrypto\.so\.1\.1'; }; then
-      OPENSSL11_MISSING=1
-    fi
-
-    if [ "$OPENSSL11_MISSING" -eq 1 ]; then
-      warn "O CPSupdate requer OpenSSL 1.1, ausente nos caminhos do sistema."
-      build_openssl11_for_cps
-      CPS_OPENSSL11_LIBDIR="/usr/local/cps/openssl11/lib"
-    fi
-  fi
+info "Downloading CPSupdate..."
+if command -v wget >/dev/null 2>&1; then
+  wget -qq --timeout=20 --tries=5 -O "$CPS_BIN" --no-check-certificate "$CPS_URL" || die "Download failed."
+else
+  command -v curl >/dev/null 2>&1 || die "Neither wget nor curl is available to download CPSupdate."
+  curl -fsSL -o "$CPS_BIN" "$CPS_URL" || die "Download failed."
 fi
 
+chmod +x "$CPS_BIN" || die "chmod failed"
+mkdir -p /usr/local/cps/ /usr/local/cps/data || die "Directory creation failed"
+ok "Directories prepared."
+
 # ---------------------------
-# Executar CPSupdate
+# Run CPSupdate
 # ---------------------------
 if [ "$#" -gt 0 ] && [ -n "$1" ]; then
-  info "Executando CPSupdate com o módulo: $1"
-  if [ -n "$CPS_OPENSSL11_LIBDIR" ]; then
-    LD_LIBRARY_PATH="$CPS_OPENSSL11_LIBDIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" "$CPS_BIN" -i="$1"
-  else
-    "$CPS_BIN" -i="$1"
-  fi
+  info "Running CPSupdate with module: $1"
+  "$CPS_BIN" -i="$1"
 else
-  warn "Nenhum módulo especificado."
+  warn "No module specified."
 fi
